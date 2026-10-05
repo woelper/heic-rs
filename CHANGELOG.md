@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- An unspecified matrix (`matrix_coefficients` 2) is read as BT.601 instead of BT.709, as libheif
+  does. Output changes only for files that leave the matrix unspecified.
+
 ## [0.1.1] - 2026-09-11
 
 Performance. Output is bit-identical to 0.1.0 on every fixture, the API is unchanged, and the MSRV
