@@ -1,0 +1,39 @@
+# Fuzz targets for heic-rs (cargo-fuzz / libFuzzer). A crate of its own, outside the published
+# package and the workspace: nothing here is a dependency of heic-rs or reaches its users.
+[package]
+name = "heic-rs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+heic-rs = { path = "..", default-features = false }
+
+# Its own workspace, so the crate above does not try to adopt it.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "probe"
+path = "fuzz_targets/probe.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "boxes"
+path = "fuzz_targets/boxes.rs"
+test = false
+doc = false
+bench = false

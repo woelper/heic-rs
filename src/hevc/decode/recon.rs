@@ -65,6 +65,11 @@ pub fn reconstruct(
     };
     let w = n.min(plane.width.saturating_sub(x));
     let h = n.min(plane.height.saturating_sub(y));
+    if w == 0 || h == 0 {
+        // The block starts right of or below the picture: nothing to write, and its row offsets
+        // can point past the end of the plane (reported by s17sh70x2jfl031ag against 0.1.3).
+        return Ok(());
+    }
     for j in 0..h {
         let o = (y + j) * plane.stride + x;
         let dst = &mut plane.data[o..o + w];

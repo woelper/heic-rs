@@ -605,7 +605,9 @@ If `heic-rs` is useful to you, a star on the repository is how other people find
    instead: an inverse-scan table for the last significant coefficient, dequantisation bounded by
    the coefficient extent, const-generic intra predictors, and per-block reference gathering.
    `state::available` and the per-transform-unit zero fill are the next two, worth about 5%.
-2. Run the fuzz targets described in [SECURITY.md](SECURITY.md) and fix whatever they find.
+2. ~~Run the fuzz targets described in [SECURITY.md](SECURITY.md) and fix whatever they find.~~
+   **Done, and kept running:** `decode`, `probe` and `boxes` (`fuzz/`) run in CI on every push. The
+   one finding so far, a panic on a malformed `uuid` box, was reported from outside and fixed in 0.1.2.
 3. Alpha (`auxC`) decoding end to end.
 4. Portable SIMD in `src/color/kernel.rs` once `std::simd` stabilises.
 5. Consider `iovl` overlay derivation and 12-bit samples, in that order.

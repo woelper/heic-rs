@@ -2,15 +2,12 @@
 
 ## Supported versions
 
-`heic-rs` has not had a release yet. Until 0.1.0 ships, the supported version is the `main` branch.
+Security fixes land on the latest published 0.1.x release; older minor versions are not backported.
 
 | Version | Supported |
 |---|---|
-| `main` (unreleased) | yes |
-| 0.1.x | yes, once released |
-
-After the first release, security fixes land on the latest published minor version. Older minor
-versions are not backported.
+| 0.1.4 and later 0.1.x | yes |
+| 0.1.0 – 0.1.3 | no -- upgrade to 0.1.4 (panics on malformed boxes and HEVC streams, and an item-data amplification, fixed in 0.1.2 to 0.1.4) |
 
 ## Reporting a vulnerability
 
@@ -77,27 +74,32 @@ The realistic attack against a safe decoder is making it allocate or compute too
 
 ## Fuzzing
 
-**No fuzzing has been run on this crate yet.** Saying otherwise would be a false assurance, so: it
-has not happened. It is on the roadmap, and it will happen before 0.1.0 is published.
+The crate is fuzzed with [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz) (libFuzzer). The
+targets live in [`fuzz/`](fuzz/), a crate of their own that is not part of the published package:
 
-`cargo-fuzz` requires a nightly toolchain, which is why fuzz targets are not part of the stable CI
-matrix: the whole point of the matrix is to prove the crate builds and passes on stable and on the
-1.85 MSRV. Fuzzing will run out of band instead.
+- `decode` — drives `decode` over arbitrary bytes, with `max_pixels` held to four megapixels so a
+  legitimately large image is refused rather than mistaken for a resource-exhaustion finding.
+- `probe` — drives `probe`, the container parser without pixels: the code path most likely to be
+  pointed at hostile input.
+- `boxes` — drives the box walk every other parser stands on, and walks each box's payload again.
 
-The intended targets:
-
-- `fuzz_parse` — drives `probe` over arbitrary bytes. Any panic, hang, or unbounded allocation is a
-  finding. This is the highest-value target, because `probe` covers the entire container parser and
-  is the code path most likely to be pointed at hostile input.
-- `fuzz_decode` — drives `decode` over arbitrary bytes with a deliberately small `max_pixels`, so
-  that a legitimately large image does not masquerade as a resource-exhaustion finding. This target
-  only becomes interesting once the HEVC decoder lands; today it stops at the codec seam.
-
-To run one, once the targets exist:
+CI runs each target for two minutes on every push and pull request, from the test fixtures as a
+seed corpus, and keeps any crashing input as a build artifact. `cargo-fuzz` needs a nightly toolchain,
+which is why fuzzing is its own job rather than part of the stable and MSRV matrix.
 
 ```
-cargo +nightly fuzz run fuzz_parse
+cargo install cargo-fuzz
+./fuzz/seed.sh
+cargo +nightly fuzz run probe -- -max_total_time=300
 ```
+
+The first finding was external: a `uuid` box too small for its own extended type panicked in 0.1.1,
+found by fuzzing and reported privately by s17sh70x2jfl031ag. It is fixed in 0.1.2, and the `boxes`
+target rediscovers it from an empty corpus when the fix is reverted -- which is how the harness was
+shown to be able to find what it is for. The harness's own first finding came on its first CI run: items
+assembled from items could be made to demand gigabytes from a few hundred bytes. Fixed in 0.1.3.
+Five more panics in the HEVC decoder followed from the same reporter's fuzzing (fixed in 0.1.4); two of
+them needed overflow checks to show, so CI now fuzzes with debug assertions on.
 
 Because the decoding path takes `&[u8]` and performs no I/O, a fuzz target is a two-line harness with
 no filesystem setup and no mocking. That is one of the concrete payoffs of the SBIO rule.

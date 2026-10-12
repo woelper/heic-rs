@@ -167,7 +167,14 @@ fn parse_independent(
             h.sao_chroma = r.u1()? != 0;
         }
     }
-    h.qp = pps.init_qp + r.se()?;
+    // SliceQpY lies in -QpBdOffsetY..=51, and the dequantiser shifts by qp / 6: unchecked, a large
+    // value shifted by 64 or more (reported by s17sh70x2jfl031ag against 0.1.3).
+    let qp_bd_offset = 6 * (i32::from(sps.bit_depth_y) - 8);
+    h.qp = pps
+        .init_qp
+        .checked_add(r.se()?)
+        .filter(|qp| (-qp_bd_offset..=51).contains(qp))
+        .ok_or(Error::InvalidData("slice QP out of range"))?;
     if pps.slice_chroma_qp_offsets_present {
         h.cb_qp_offset = r.se()?;
         h.cr_qp_offset = r.se()?;

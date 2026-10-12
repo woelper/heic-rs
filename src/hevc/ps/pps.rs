@@ -106,7 +106,13 @@ pub fn parse(data: &[u8]) -> Result<Pps> {
     p.cabac_init_present = r.u1()? != 0;
     r.ue()?; // num_ref_idx_l0_default_active_minus1
     r.ue()?; // num_ref_idx_l1_default_active_minus1
-    p.init_qp = r.se()? + 26;
+    // init_qp_minus26 lies in -(26 + QpBdOffsetY)..=25; the bit depth is the SPS's, so bounded
+    // here by the deepest one this crate reads (16 bits, an offset of 48), and exactly per slice.
+    p.init_qp = r
+        .se()?
+        .checked_add(26)
+        .filter(|qp| (-48..=51).contains(qp))
+        .ok_or(Error::InvalidData("init_qp out of range"))?;
     p.constrained_intra_pred = r.u1()? != 0;
     p.transform_skip = r.u1()? != 0;
     p.cu_qp_delta_enabled = r.u1()? != 0;

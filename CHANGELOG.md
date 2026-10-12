@@ -23,6 +23,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An unspecified matrix (`matrix_coefficients` 2) is read as BT.601 instead of BT.709, as libheif
   does. Output changes only for files that leave the matrix unspecified.
 
+## [0.1.4] - 2026-10-11
+
+Security fixes: five ways a malformed HEVC stream could panic, all found by fuzzing and reported
+privately, with fixes, by **s17sh70x2jfl031ag** -- thank you again. Take it if you decode untrusted
+files. Output, API and MSRV are unchanged: every fixture still decodes bit for bit as before.
+
+### Security
+
+Panics in release builds:
+
+- **A block starting right of the picture.** Its width clips to nothing, but its row offsets were
+  still computed and on the last rows pointed past the end of the plane (`decode/recon.rs`). Such a
+  block now writes nothing, as blocks partly outside the picture already wrote only what is inside.
+- **A conformance window as large as the picture.** The crop then started outside the decoded plane
+  (`decode/mod.rs`). The SPS now refuses a window whose offsets leave no sample in either direction,
+  as FFmpeg's strict mode does, with the offsets scaled and summed in checked arithmetic.
+- **A reference row or column outside the plane.** For a block starting below or right of the
+  picture, the row above and the corner were read from past the end of the plane (`decode/refs.rs`).
+  They, and the column to the left, are now unavailable there, as a column below the plane already
+  was.
+
+Panics with overflow checks on (debug builds, tests, fuzzing); release builds returned an error:
+
+- **A PCM bit depth above the sample bit depth** underflowed `bit_depth - pcm_bit_depth`
+  (`decode/ctu.rs`). The SPS refuses it, as FFmpeg does, and also refuses a PCM block size outside
+  the 8 to 32 samples the standard allows: those sizes are shift amounts.
+- **A slice QP outside `-QpBdOffsetY..=51`** shifted the dequantiser by 64 or more
+  (`transform/dequant.rs`). The slice header refuses it, as FFmpeg does, in checked arithmetic; and
+  the PPS refuses an `init_qp` that no bit depth allows, which overflowed on its own.
+
+No memory-safety impact: the crate is `#![forbid(unsafe_code)]`.
+
+### Added
+
+- The five reported files as regression tests (`tests/hevc_hostile.rs`), each run in debug and in
+  release builds.
+- CI fuzzing runs with debug assertions, so arithmetic overflow fails the job; every input that has
+  found a bug is part of the seed corpus.
+
+## [0.1.3] - 2026-10-11
+
+A security fix, the first finding of the fuzzing 0.1.2 added. Take it if you decode untrusted files:
+a 690-byte input could make `probe` or `decode` ask for gigabytes. Output, API and MSRV are unchanged.
+
+### Security
+
+- **Items built from other items could outgrow any bound.** An item stored by construction method
+  2 is assembled from the data of other items, and each may list several extents; with items built
+  from items, eight deep, every level multiplied the one beneath it. The `probe` fuzz target found a
+  690-byte file that asked for 2.2 GB on its first CI run. An assembled item may now be no larger
+  than the file that holds it -- it is made of that file's bytes -- and a larger one is
+  `Error::Malformed`. No memory-safety impact; a resource-exhaustion bug reachable from untrusted
+  input, which `DecodeOptions::max_pixels` did not cover because it caps pixels, not item data.
+
+### Added
+
+- The fuzzer's input as a regression test, with a counting allocator: before the fix the peak grew by
+  52.9 GB; now by less than a megabyte.
+
+### Fixed
+
+- CI's publish dry run regenerated the committed lockfile and failed on the dirty tree.
+
+## [0.1.2] - 2026-10-11
+
+A security fix. Take it if you decode untrusted files: a 24-byte input could make `decode` panic.
+Output, API and MSRV are unchanged.
+
+### Security
+
+- **A `uuid` box too small for its own extended type panicked instead of being refused.** The check
+  that a box's stated size covers its header was made before the 16-byte extended type of a `uuid`
+  box was read, so a `uuid` box stating 20 bytes passed it, and its payload was sliced from byte 24
+  of a 20-byte box: `slice index starts at 24 but ends at 20` (`src/boxes.rs`), with the default
+  options and in release builds. The header is now measured after the extended type, and the
+  payload is sliced from that measurement. No memory-safety impact: the crate is
+  `#![forbid(unsafe_code)]`, so the bug was a panic, which a caller decoding uploads should never
+  have to catch. Found by fuzzing and reported privately under `SECURITY.md` by
+  **s17sh70x2jfl031ag**, with the fix -- thank you.
+
+### Added
+
+- Regression tests: the reported input, through `BoxIter` and `decode`; the same shape with a 64-bit
+  size; and every 32- and 64-bit header of a `uuid`, `mdat` or `meta` box with any stated size below
+  64 over every buffer length below 64 -- an error or a box, never a panic.
+- Fuzzing. `fuzz/` holds three `cargo-fuzz` targets -- `decode`, `probe` and the box walk -- and CI
+  runs each for two minutes on every push and pull request, seeded with the test fixtures, keeping
+  any crashing input as an artifact. With the fix reverted, the box-walk target finds this release's
+  panic from an empty corpus. GitHub's private vulnerability reporting is switched on, so the route
+  `SECURITY.md` prefers now works.
+
 ## [0.1.1] - 2026-09-11
 
 Performance. Output is bit-identical to 0.1.0 on every fixture, the API is unchanged, and the MSRV

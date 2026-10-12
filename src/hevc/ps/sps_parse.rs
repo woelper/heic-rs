@@ -37,10 +37,17 @@ pub fn parse(data: &[u8]) -> Result<Sps> {
     let mut crop = [0usize; 4];
     if r.u1()? != 0 {
         let (cw, ch) = if sub_w == 0 { (1, 1) } else { (sub_w, sub_h) };
-        crop[0] = r.ue()? as usize * cw;
-        crop[1] = r.ue()? as usize * cw;
-        crop[2] = r.ue()? as usize * ch;
-        crop[3] = r.ue()? as usize * ch;
+        let too_large = Error::InvalidData("conformance window larger than the picture");
+        for (slot, unit) in crop.iter_mut().zip([cw, cw, ch, ch]) {
+            *slot = (r.ue()? as usize).checked_mul(unit).ok_or(too_large)?;
+        }
+        // The window crops inside the picture, leaving at least one sample each way; one as large
+        // as the picture started the crop outside the decoded plane (reported by
+        // s17sh70x2jfl031ag against 0.1.3). FFmpeg's strict mode refuses the same.
+        let inside = |a: usize, b: usize, whole: usize| a.checked_add(b).is_some_and(|s| s < whole);
+        if !inside(crop[0], crop[1], width) || !inside(crop[2], crop[3], height) {
+            return Err(too_large);
+        }
     }
     let bit_depth_y = (r.ue()? + 8) as u8;
     let bit_depth_c = (r.ue()? + 8) as u8;
@@ -89,6 +96,17 @@ pub fn parse(data: &[u8]) -> Result<Sps> {
         l2minp = r.ue()? as usize + 3;
         l2maxp = l2minp + r.ue()? as usize;
         pcm_lf = r.u1()? != 0;
+        // PCM samples are no deeper than the picture's (reported by s17sh70x2jfl031ag against
+        // 0.1.3: `bit_depth - pcm_bit_depth` underflowed), and a PCM block is 8 to 32 samples a
+        // side, so its log2 sizes are 3 to 5 -- unbounded, they are shift amounts.
+        if pbd_y > bit_depth_y || pbd_c > bit_depth_c {
+            return Err(Error::InvalidData(
+                "PCM bit depth greater than the sample bit depth",
+            ));
+        }
+        if l2maxp > 5 {
+            return Err(Error::InvalidData("PCM block size out of range"));
+        }
     }
     let num_st_rps = r.ue()?;
     if num_st_rps > 64 {

@@ -130,6 +130,15 @@ impl<'a> Meta<'a> {
         let mut out = Vec::new();
         for e in &loc.extents {
             let part = self.extent_bytes(file, loc, e, depth)?;
+            // An item is assembled from the file's own bytes, so one larger than the file that
+            // holds it is a file repeating itself. Unchecked, items built from items (construction
+            // method 2), several extents apiece and eight deep, multiplied at every level: 690
+            // bytes found by the `probe` fuzz target asked for gigabytes (0.1.2).
+            if out.len().saturating_add(part.len()) > file.len() {
+                return Err(Error::Malformed(
+                    "item data is larger than the file that holds it",
+                ));
+            }
             out.extend_from_slice(&part);
         }
         Ok(Cow::Owned(out))

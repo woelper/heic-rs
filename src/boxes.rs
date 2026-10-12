@@ -102,7 +102,6 @@ impl<'a> BoxIter<'a> {
             0 => (self.data.len() - start) as u64,
             n => u64::from(n),
         };
-        let header_len = r.position();
         let uuid = if boxtype == *b"uuid" {
             let b = r.take(16, "uuid")?;
             let mut u = [0u8; 16];
@@ -111,6 +110,11 @@ impl<'a> BoxIter<'a> {
         } else {
             None
         };
+        // The whole header, the extended type of a `uuid` box included. Measured before the UUID
+        // was read, a `uuid` box whose size covered its size and type but not its UUID passed
+        // this check and had its payload sliced from past its own end -- a panic, found by
+        // fuzzing and reported privately against 0.1.1.
+        let header_len = r.position();
         if total < header_len as u64 {
             return Err(Error::Malformed("box size is smaller than its own header"));
         }
@@ -127,7 +131,7 @@ impl<'a> BoxIter<'a> {
         if end > self.data.len() {
             return Err(Error::Truncated("box body"));
         }
-        let payload = &self.data[start + r.position()..end];
+        let payload = &self.data[start + header_len..end];
         self.pos = end;
         Ok(Some(BoxHeader {
             boxtype,

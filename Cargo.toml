@@ -1,6 +1,6 @@
 [package]
 name = "heic-rs"
-version = "0.1.1"
+version = "0.1.4"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -14,7 +14,10 @@ categories = ["multimedia::images", "encoding", "no-std", "wasm"]
 exclude = [
     "tests/fixtures/*.heic",
     "tests/fixtures/*.png",
+    "tests/fixtures/fuzz/*",
     ".github/*",
+    # The fuzz targets are their own crate and no part of the library.
+    "fuzz/*",
     # The README's charts ship (crates.io resolves relative links against the repository,
     # but a vendored copy should still be able to draw them). What it makes them from does not.
     "assets/fonts/*",

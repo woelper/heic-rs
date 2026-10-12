@@ -42,10 +42,15 @@ pub fn gather_refs(d: &Dec<'_>, x: usize, y: usize, n: usize, c_idx: usize) -> R
     let min_tb = 1usize << d.geo.min_tb_log2;
     let (step_x, step_y) = ((min_tb / sw).max(1), (min_tb / sh).max(1));
     let mut all = true;
+    // The column left of the block and the row above it exist only inside the plane. A block that
+    // starts right of or below the picture has no samples there to read: unavailable, as a
+    // column below the plane already was (reported by s17sh70x2jfl031ag against 0.1.3).
+    let left_in = x > 0 && x - 1 < plane.width;
+    let above_in = y > 0 && y - 1 < plane.height;
 
     // Index 0 is p[-1][2n-1] and index 2n-1 is p[-1][0]: the left column,
     // walked downwards from the block's top edge.
-    if x > 0 {
+    if left_in {
         let col = x - 1;
         let mut k = 0;
         while k < 2 * n {
@@ -70,7 +75,8 @@ pub fn gather_refs(d: &Dec<'_>, x: usize, y: usize, n: usize, c_idx: usize) -> R
     }
 
     // Index 2n is the corner p[-1][-1].
-    if x > 0 && y > 0 && d.available(xc, yc, ((x - 1) * sw) as isize, ((y - 1) * sh) as isize) {
+    if left_in && above_in && d.available(xc, yc, ((x - 1) * sw) as isize, ((y - 1) * sh) as isize)
+    {
         r.buf[2 * n] = data[(y - 1) * stride + x - 1];
         avail[2 * n] = true;
     } else {
@@ -78,7 +84,7 @@ pub fn gather_refs(d: &Dec<'_>, x: usize, y: usize, n: usize, c_idx: usize) -> R
     }
 
     // Indices 2n+1 ..= 4n are p[0][-1] ..= p[2n-1][-1]: the top row.
-    if y > 0 {
+    if above_in {
         let row = (y - 1) * stride;
         let mut k = 0;
         while k < 2 * n {

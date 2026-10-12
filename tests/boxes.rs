@@ -166,3 +166,67 @@ fn every_brand_round_trips_through_its_fourcc() {
     }
     assert!(!Brand::Avif.is_decodable());
 }
+
+/// A `uuid` box whose stated size covers its size and type but not its 16-byte extended type.
+/// The check against the header was made before the extended type was read, so the box passed it
+/// and its payload was sliced from past its own end: a panic, reported privately in October 2026
+/// against 0.1.1 with this input, from fuzzing.
+#[test]
+fn a_uuid_box_too_small_for_its_extended_type_is_refused_not_a_panic() {
+    let data = [
+        0x00, 0x00, 0x00, 0x14, b'u', b'u', b'i', b'd', 0x00, 0x00, 0x00, 0x36, b'a', b'u', b'x',
+        b'C', 0, 0, 0, 0, 0, 0, 0, 0x70,
+    ];
+    let first = BoxIter::new(&data).next();
+    assert!(matches!(first, Some(Err(Error::Malformed(_)))), "{first:?}");
+    // And through the crate's front door, with its defaults, as it was reported.
+    assert!(heic_rs::decode(&data, &heic_rs::DecodeOptions::default()).is_err());
+}
+
+/// The same shape with a 64-bit size: the header is then 32 bytes, not 24.
+#[test]
+fn a_large_uuid_box_too_small_for_its_extended_type_is_refused() {
+    let mut data = 1u32.to_be_bytes().to_vec();
+    data.extend_from_slice(b"uuid");
+    // 16 + 16 would cover size, type, largesize and part of the UUID -- not all of it.
+    data.extend_from_slice(&24u64.to_be_bytes());
+    data.extend_from_slice(&[0xAB; 24]);
+    let first = BoxIter::new(&data).next();
+    assert!(matches!(first, Some(Err(Error::Malformed(_)))), "{first:?}");
+}
+
+/// Every small header shape, every small stated size, every short buffer: an error or a box, never
+/// a panic. The class the `uuid` report belonged to -- a size checked against part of a header --
+/// is closed here for the header as a whole, rather than for the one input that found it.
+#[test]
+fn no_small_header_of_any_size_or_length_panics() {
+    for boxtype in [*b"uuid", *b"mdat", *b"meta"] {
+        for large in [false, true] {
+            for stated in 0u64..64 {
+                for len in 0usize..64 {
+                    let mut data = Vec::with_capacity(len.max(40));
+                    if large {
+                        data.extend_from_slice(&1u32.to_be_bytes());
+                        data.extend_from_slice(&boxtype);
+                        data.extend_from_slice(&stated.to_be_bytes());
+                    } else {
+                        data.extend_from_slice(&(stated as u32).to_be_bytes());
+                        data.extend_from_slice(&boxtype);
+                    }
+                    data.resize(len.max(data.len()), 0x41);
+                    data.truncate(len);
+                    let result = std::panic::catch_unwind(|| {
+                        let walked: Vec<_> = BoxIter::new(&data).collect();
+                        let _ = heic_rs::decode(&data, &heic_rs::DecodeOptions::default());
+                        walked.len()
+                    });
+                    assert!(
+                        result.is_ok(),
+                        "panicked: type {:?}, large {large}, size {stated}, length {len}",
+                        std::str::from_utf8(&boxtype)
+                    );
+                }
+            }
+        }
+    }
+}
