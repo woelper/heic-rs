@@ -51,6 +51,8 @@ pub mod bench_api;
 mod golden;
 #[cfg(test)]
 mod golden_422;
+#[cfg(test)]
+mod golden_444;
 
 pub use frame::{ChromaFormat, Frame, Info, VideoSignal};
 

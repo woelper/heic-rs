@@ -60,6 +60,13 @@ files, so this one vector comes from `scripts/make-422-vector.sh` instead (Linux
 macOS, needs FFmpeg with libx265). Its ground truth is FFmpeg's own decode, kept as
 a checksum in `src/hevc/golden_422.rs`, which the decoder must match sample for sample.
 
+### `hevc/intra-444-8.hevc`
+
+The same for 4:4:4: one 128x128 intra picture of `testsrc2`, 4:4:4 8-bit, encoded
+by x265. `sips` cannot write 4:4:4 either, so it comes from
+`scripts/make-444-vector.sh` (needs FFmpeg with libx265). Its ground truth is
+FFmpeg's decode, as a checksum in `src/hevc/golden_444.rs`.
+
 ## Caveats for test authors
 
 * `irot` is present in **every** fixture with **angle 0**. Presence alone does not
